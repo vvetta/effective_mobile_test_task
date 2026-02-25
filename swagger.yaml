@@ -1,0 +1,668 @@
+openapi: 3.0.3
+info:
+  title: Subscriptions Aggregator API
+  version: 1.0.0
+  description: |
+    REST API для CRUDL-операций над онлайн-подписками пользователей и подсчета суммарной стоимости подписок за период.
+
+
+servers:
+  - url: /api/v1
+
+tags:
+  - name: Subscriptions
+    description: CRUDL операции над подписками
+  - name: Analytics
+    description: Агрегация и подсчеты
+
+paths:
+
+  /subscriptions:
+    post:
+      tags: [Subscriptions]
+      summary: Create subscription
+      operationId: createSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+
+            schema:
+              $ref: "#/components/schemas/SubscriptionCreateRequest"
+            examples:
+              default:
+                value:
+                  serviceName: Netflix
+                  monthlyCostRub: 799
+                  userId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  startPeriod: "2026-02"
+
+                  endPeriod: null
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+
+              schema:
+                $ref: "#/components/schemas/Subscription"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      tags: [Subscriptions]
+      summary: List subscriptions
+      operationId: listSubscriptions
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/UserIdQuery"
+        - $ref: "#/components/parameters/ServiceNameQuery"
+
+        - name: startPeriodFrom
+          in: query
+          required: false
+          description: Фильтр по периоду начала подписки (с)
+          schema:
+
+            $ref: "#/components/schemas/Period"
+
+        - name: startPeriodTo
+          in: query
+          required: false
+          description: Фильтр по периоду начала подписки (по)
+          schema:
+            $ref: "#/components/schemas/Period"
+        - name: activeAt
+          in: query
+          required: false
+
+          description: Показать подписки, активные в указанный период (YYYY-MM)
+          schema:
+
+            $ref: "#/components/schemas/Period"
+
+      responses:
+        "200":
+
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /subscriptions/{subscriptionId}:
+
+    parameters:
+      - $ref: "#/components/parameters/SubscriptionId"
+    get:
+      tags: [Subscriptions]
+      summary: Get subscription by id
+      operationId: getSubscription
+      responses:
+        "200":
+          description: OK
+
+          content:
+            application/json:
+              schema:
+
+                $ref: "#/components/schemas/Subscription"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+
+    put:
+      tags: [Subscriptions]
+      summary: Replace subscription (full update)
+      operationId: updateSubscription
+      requestBody:
+        required: true
+
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscriptionUpdateRequest"
+            examples:
+              default:
+                value:
+                  serviceName: YouTube Premium
+                  monthlyCostRub: 399
+                  userId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  startPeriod: "2026-01"
+                  endPeriod: "2026-06"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    patch:
+      tags: [Subscriptions]
+      summary: Patch subscription (partial update)
+      operationId: patchSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+
+              $ref: "#/components/schemas/SubscriptionPatchRequest"
+            examples:
+              setEndPeriod:
+
+                value:
+                  endPeriod: "2026-06"
+      responses:
+        "200":
+          description: Updated
+          content:
+
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+
+      tags: [Subscriptions]
+
+      summary: Delete subscription
+      operationId: deleteSubscription
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /subscriptions/total:
+    get:
+      tags: [Analytics]
+      summary: Calculate total cost for a period
+      operationId: getTotalCost
+      description: |
+        Подсчет суммарной стоимости подписок за выбранный период.
+        Фильтры userId и serviceName опциональны.
+
+        Период задается месяцами (YYYY-MM), границы включительно.
+
+        Логика расчета: подписка учитывается за каждый месяц в [fromPeriod, toPeriod],
+        если этот месяц попадает в интервал активности подписки [startPeriod, endPeriod], где endPeriod может быть null.
+      parameters:
+        - $ref: "#/components/parameters/FromPeriod"
+        - $ref: "#/components/parameters/ToPeriod"
+
+        - $ref: "#/components/parameters/UserIdQuery"
+
+        - $ref: "#/components/parameters/ServiceNameQuery"
+        - name: includeBreakdown
+          in: query
+          required: false
+          description: Включить разбивку по сервисам
+          schema:
+            type: boolean
+
+            default: false
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotalCostResponse"
+              examples:
+                default:
+                  value:
+                    fromPeriod: "2026-01"
+                    toPeriod: "2026-03"
+                    currency: RUB
+                    totalRub: 3597
+                    filters:
+                      userId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                      serviceName: null
+                    breakdown:
+                      - serviceName: Netflix
+                        monthsCounted: 3
+                        subtotalRub: 2397
+                      - serviceName: YouTube Premium
+
+                        monthsCounted: 3
+                        subtotalRub: 1200
+                    monthsCountedTotal: 6
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  parameters:
+    SubscriptionId:
+      name: subscriptionId
+      in: path
+      required: true
+      description: Subscription ID
+      schema:
+        type: string
+        format: uuid
+
+    Limit:
+
+      name: limit
+      in: query
+
+      required: false
+      description: Page size
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: Offset for pagination
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+    UserIdQuery:
+      name: userId
+      in: query
+      required: false
+      description: Filter by userId (UUID)
+      schema:
+        type: string
+        format: uuid
+
+
+    ServiceNameQuery:
+      name: serviceName
+
+      in: query
+      required: false
+      description: Filter by subscription service name (exact match)
+      schema:
+
+        type: string
+
+        minLength: 1
+        maxLength: 200
+
+    FromPeriod:
+      name: fromPeriod
+      in: query
+      required: true
+      description: Period start (YYYY-MM), inclusive
+      schema:
+        $ref: "#/components/schemas/Period"
+
+
+    ToPeriod:
+      name: toPeriod
+      in: query
+      required: true
+      description: Period end (YYYY-MM), inclusive
+      schema:
+        $ref: "#/components/schemas/Period"
+
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            badRequest:
+              value:
+                code: BAD_REQUEST
+                message: Validation error
+                details:
+                  - field: fromPeriod
+                    issue: must match YYYY-MM
+
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            notFound:
+              value:
+                code: NOT_FOUND
+                message: Resource not found
+
+
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            conflict:
+              value:
+                code: CONFLICT
+
+                message: Conflicting resource state
+
+
+    InternalError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            internal:
+              value:
+                code: INTERNAL
+
+                message: Internal server error
+
+  schemas:
+    Period:
+      type: string
+      description: Month period in format YYYY-MM
+      pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+      example: "2026-02"
+
+    Subscription:
+
+      type: object
+      required:
+        - id
+
+        - serviceName
+        - monthlyCostRub
+        - userId
+        - startPeriod
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        serviceName:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Name of the service providing the subscription
+        monthlyCostRub:
+          type: integer
+          minimum: 0
+          description: Monthly subscription cost in rubles
+        userId:
+          type: string
+          format: uuid
+        startPeriod:
+          $ref: "#/components/schemas/Period"
+        endPeriod:
+          allOf:
+
+            - $ref: "#/components/schemas/Period"
+          nullable: true
+          description: Optional end period (YYYY-MM). If null, subscription is ongoing.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SubscriptionCreateRequest:
+      type: object
+      required:
+        - serviceName
+        - monthlyCostRub
+        - userId
+        - startPeriod
+      properties:
+        serviceName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        monthlyCostRub:
+          type: integer
+          minimum: 0
+        userId:
+          type: string
+          format: uuid
+        startPeriod:
+
+          $ref: "#/components/schemas/Period"
+        endPeriod:
+          allOf:
+            - $ref: "#/components/schemas/Period"
+          nullable: true
+
+
+    SubscriptionUpdateRequest:
+      type: object
+      required:
+        - serviceName
+        - monthlyCostRub
+        - userId
+        - startPeriod
+      properties:
+        serviceName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        monthlyCostRub:
+          type: integer
+          minimum: 0
+        userId:
+
+          type: string
+          format: uuid
+        startPeriod:
+          $ref: "#/components/schemas/Period"
+        endPeriod:
+          allOf:
+            - $ref: "#/components/schemas/Period"
+          nullable: true
+
+
+    SubscriptionPatchRequest:
+      type: object
+      description: |
+        Частичное обновление. Передавайте только те поля, которые хотите изменить.
+
+      properties:
+        serviceName:
+          type: string
+
+          minLength: 1
+          maxLength: 200
+
+        monthlyCostRub:
+          type: integer
+
+          minimum: 0
+
+        userId:
+          type: string
+          format: uuid
+
+        startPeriod:
+          $ref: "#/components/schemas/Period"
+        endPeriod:
+          allOf:
+            - $ref: "#/components/schemas/Period"
+          nullable: true
+
+    SubscriptionListResponse:
+
+      type: object
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Subscription"
+        page:
+          $ref: "#/components/schemas/PageMeta"
+
+    PageMeta:
+      type: object
+      required:
+        - limit
+        - offset
+        - count
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+
+        offset:
+          type: integer
+          minimum: 0
+        count:
+          type: integer
+          minimum: 0
+          description: Number of returned items in this page
+
+    TotalCostResponse:
+      type: object
+      required:
+        - fromPeriod
+        - toPeriod
+        - currency
+        - totalRub
+        - filters
+        - monthsCountedTotal
+      properties:
+
+        fromPeriod:
+
+          $ref: "#/components/schemas/Period"
+        toPeriod:
+          $ref: "#/components/schemas/Period"
+        currency:
+          type: string
+          enum: [RUB]
+        totalRub:
+          type: integer
+          minimum: 0
+          description: Total cost in rubles for the selected period
+        monthsCountedTotal:
+          type: integer
+          minimum: 0
+          description: Total counted subscription-months in aggregation
+        filters:
+          $ref: "#/components/schemas/TotalCostFilters"
+        breakdown:
+          type: array
+          description: Present only if includeBreakdown=true
+          items:
+            $ref: "#/components/schemas/TotalCostBreakdownItem"
+
+    TotalCostFilters:
+      type: object
+      required:
+        - userId
+
+        - serviceName
+      properties:
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        serviceName:
+          type: string
+          nullable: true
+
+    TotalCostBreakdownItem:
+      type: object
+      required:
+
+        - serviceName
+        - monthsCounted
+        - subtotalRub
+      properties:
+        serviceName:
+          type: string
+        monthsCounted:
+
+          type: integer
+          minimum: 0
+        subtotalRub:
+          type: integer
+          minimum: 0
+
+    ErrorResponse:
+      type: object
+
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+
+          description: Machine readable error code
+          example: BAD_REQUEST
+        message:
+          type: string
+          description: Human readable error message
+          example: Validation error
+        details:
+          type: array
+          description: Optional error details
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+
+    ErrorDetail:
+      type: object
+      required:
+        - field
+        - issue
+      properties:
+        field:
+
+          type: string
+          example: startPeriod
+        issue:
+          type: string
+          example: must match YYYY-MM
